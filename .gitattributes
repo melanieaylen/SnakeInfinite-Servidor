@@ -1,0 +1,6 @@
+* text=auto eol=lf
+*.bat text=auto eol=crlf
+assets/sonidos/* filter=lfs diff=lfs merge=lfs -text
+*.ogg filter=lfs diff=lfs merge=lfs -text
+*.mp3 filter=lfs diff=lfs merge=lfs -text
+*.wav filter=lfs diff=lfs merge=lfs -text
