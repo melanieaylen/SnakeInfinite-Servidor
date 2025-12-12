@@ -1,0 +1,42 @@
+package red;
+
+import java.net.InetAddress;
+
+/**
+ * Clase que representa a un cliente conectado al servidor
+ */
+public class Cliente {
+
+    private String id;
+    private int numero;
+    private InetAddress ip;
+    private int puerto;
+
+    public Cliente(int numero, InetAddress ip, int puerto) {
+        this.numero = numero;
+        this.id = ip.toString() + ":" + puerto;
+        this.ip = ip;
+        this.puerto = puerto;
+    }
+
+    public String obtenerId() {
+        return id;
+    }
+
+    public InetAddress obtenerIp() {
+        return ip;
+    }
+
+    public int obtenerPuerto() {
+        return puerto;
+    }
+
+    public int obtenerNumero() {
+        return numero;
+    }
+
+    @Override
+    public String toString() {
+        return "Cliente " + numero + " [" + ip.getHostAddress() + ":" + puerto + "]";
+    }
+}
