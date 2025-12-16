@@ -18,8 +18,8 @@ public class HiloServidor extends Thread {
     private DatagramSocket conexion;
     private int puertoServidor = 9998;
     private boolean fin = false;
-    private final int MIN_JUGADORES = 2; // ✅ CAMBIO: Mínimo 2
-    private final int MAX_JUGADORES = 2; // ✅ CAMBIO: Máximo 2
+    private final int MIN_JUGADORES = 2; 
+    private final int MAX_JUGADORES = 2;
     private int clientesConectados = 0;
     private ArrayList<Cliente> clientes = new ArrayList<>();
     private ControladorJuegoServidor controladorJuego;
@@ -205,7 +205,6 @@ public class HiloServidor extends Thread {
 
     private void enviarListaNombresATodos() {
         StringBuilder sb = new StringBuilder("ActualizarNombres:");
-        // ✅ CAMBIO: Solo 2 jugadores
         for (int i = 1; i <= MAX_JUGADORES; i++) {
             if (i > 1) sb.append("|");
             String nombre = nombresJugadores.get(i);

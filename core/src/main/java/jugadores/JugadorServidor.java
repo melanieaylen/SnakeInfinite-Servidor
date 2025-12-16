@@ -16,7 +16,6 @@ public class JugadorServidor {
     private SerpienteServidor serpiente;
     private Direcciones direccionActual;
     
-    // Sistema de invulnerabilidad
     private boolean invulnerable;
     private float tiempoInvulnerabilidad;
     private static final float DURACION_INVULNERABILIDAD = 1.5f;
@@ -32,24 +31,15 @@ public class JugadorServidor {
         this.tiempoInvulnerabilidad = 0;
     }
     
-    /**
-     * AÃ±ade puntos al jugador
-     */
+ 
     public void agregarPuntos(int puntos) {
         this.puntuacion += puntos;
     }
-    
-    /**
-     * Hace crecer la serpiente del jugador
-     */
+
     public void crecerSerpiente() {
         serpiente.crecer();
     }
     
-    /**
-     * Pierde una vida
-     * @return true si todavÃ­a tiene vidas, false si es Game Over
-     */
     public boolean perderVida() {
         vidas--;
         if (vidas > 0) {
@@ -58,18 +48,12 @@ public class JugadorServidor {
         }
         return false;
     }
-    
-    /**
-     * Activa la invulnerabilidad temporal
-     */
+
     public void activarInvulnerabilidad() {
         invulnerable = true;
         tiempoInvulnerabilidad = 0;
     }
-    
-    /**
-     * Actualiza el estado de invulnerabilidad
-     */
+
     public void actualizarInvulnerabilidad(float delta) {
         if (invulnerable) {
             tiempoInvulnerabilidad += delta;
@@ -79,21 +63,14 @@ public class JugadorServidor {
             }
         }
     }
-    
-    /**
-     * Resetea al jugador a la posiciÃ³n inicial
-     */
+
     public void resetearPosicion(float posX, float posY, int ancho, int alto) {
         this.serpiente = new SerpienteServidor(posX, posY, ancho, alto);
         this.direccionActual = Direcciones.NINGUNA;
     }
     
-    /**
-     * Cambia la direcciÃ³n del jugador
-     * Previene movimientos en direcciÃ³n opuesta
-     */
+
     public void cambiarDireccion(Direcciones nuevaDireccion) {
-        // No permitir direcciÃ³n opuesta
         if (nuevaDireccion == Direcciones.ARRIBA && direccionActual != Direcciones.ABAJO) {
             direccionActual = nuevaDireccion;
         } else if (nuevaDireccion == Direcciones.ABAJO && direccionActual != Direcciones.ARRIBA) {

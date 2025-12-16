@@ -1,8 +1,5 @@
 package elementos;
 
-/**
- * FrutaServidor - Versión sin LibGDX para el servidor
- */
 public class FrutaServidor {
     
     private float posX;

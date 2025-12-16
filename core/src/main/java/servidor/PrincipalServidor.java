@@ -13,7 +13,6 @@ public class PrincipalServidor {
         System.out.println("===================================");
         System.out.println();
 
-        // Crear instancia del servidor
         LogicaJuegoServidor servidor = new LogicaJuegoServidor();
 
         System.out.println();
@@ -21,7 +20,6 @@ public class PrincipalServidor {
         System.out.println("Escribe 'salir' para cerrar el servidor");
         System.out.println();
 
-        // Mantener el servidor activo hasta que el usuario escriba "salir"
         Scanner escaner = new Scanner(System.in);
         String entrada;
 
@@ -29,7 +27,6 @@ public class PrincipalServidor {
             entrada = escaner.nextLine().trim().toLowerCase();
 
             if (entrada.equals("estado")) {
-                // Mostrar estado del servidor
                 System.out.println("Estado del servidor");
             } else if (entrada.equals("ayuda")) {
                 System.out.println("Comandos disponibles:");
@@ -41,7 +38,6 @@ public class PrincipalServidor {
             }
         } while (!entrada.equals("salir"));
 
-        // Cerrar servidor
         System.out.println();
         System.out.println("Cerrando servidor...");
         servidor.cerrar();

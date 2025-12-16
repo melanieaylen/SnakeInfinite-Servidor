@@ -15,7 +15,7 @@ public enum TipoFruta {
 
     private final String rutaImagen;
     private final int puntos;
-    private final float factorVelocidad; // Por si quieres efectos especiales
+    private final float factorVelocidad;
 
     TipoFruta(String rutaImagen, int puntos, float factorVelocidad) {
         this.rutaImagen = rutaImagen;

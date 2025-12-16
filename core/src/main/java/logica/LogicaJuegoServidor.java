@@ -182,25 +182,21 @@ public class LogicaJuegoServidor implements ControladorJuegoServidor {
 			}
 		}
 
-		// Mover todas las serpientes
 		for (int i = 0; i < numeroJugadoresActivos; i++) {
 			if (jugadores[i] != null && jugadores[i].getVidas() > 0) {
 				moverSerpiente(i);
 			}
 		}
 
-		// Verificar colisiones
 		verificarColisionesFrutas();
 		verificarColisionesSerpientes(); // ✅ CORREGIDO
 
-		// Actualizar invulnerabilidad
 		for (int i = 0; i < numeroJugadoresActivos; i++) {
 			if (jugadores[i] != null) {
 				jugadores[i].actualizarInvulnerabilidad(VELOCIDAD_SERPIENTE / 1000f);
 			}
 		}
 
-		// Enviar actualizaciones a clientes
 		enviarActualizacionesSerpientes();
 		verificarFinJuego();
 	}
@@ -265,12 +261,9 @@ public class LogicaJuegoServidor implements ControladorJuegoServidor {
 		}
 	}
 
-	// ✅ CORREGIDO: Sistema de colisiones completamente refactorizado
 	private void verificarColisionesSerpientes() {
-		// Set para rastrear qué jugadores deben perder vida este frame
 		Set<Integer> jugadoresQuePerderanVida = new HashSet<>();
 		
-		// 1. Primero detectar TODAS las colisiones
 		for (int i = 0; i < numeroJugadoresActivos; i++) {
 			if (jugadores[i] == null || jugadores[i].isInvulnerable() || jugadores[i].getVidas() <= 0) {
 				continue;
@@ -281,16 +274,14 @@ public class LogicaJuegoServidor implements ControladorJuegoServidor {
 				continue;
 			}
 
-			// A. Colisión consigo mismo
 			if (serpienteActual.colisionSerpiente()) {
 				System.out.println("J" + (i + 1) + " (" + jugadores[i].getNombre() + ") choco consigo mismo");
 				jugadoresQuePerderanVida.add(i);
-				continue; // No verificar más colisiones para este jugador
+				continue; 
 			}
 
-			// B. Colisión con otros jugadores
 			for (int j = 0; j < numeroJugadoresActivos; j++) {
-				if (i == j) continue; // No colisionar consigo mismo
+				if (i == j) continue;
 				
 				if (jugadores[j] == null || jugadores[j].getVidas() <= 0) {
 					continue;
@@ -301,17 +292,15 @@ public class LogicaJuegoServidor implements ControladorJuegoServidor {
 					continue;
 				}
 
-				// Verificar si la cabeza del jugador i choca con cualquier parte del jugador j
 				if (otraSerpiente.colisionConPosicion(serpienteActual.getPosX(), serpienteActual.getPosY())) {
 					System.out.println("J" + (i + 1) + " (" + jugadores[i].getNombre() + ") " + 
 					                 "choco con J" + (j + 1) + " (" + jugadores[j].getNombre() + ")");
 					jugadoresQuePerderanVida.add(i);
-					break; // Ya sabemos que este jugador perderá vida
+					break; 
 				}
 			}
 		}
 		
-		// 2. Ahora aplicar TODAS las pérdidas de vida detectadas
 		for (Integer indice : jugadoresQuePerderanVida) {
 			jugadorPierdeVida(indice);
 		}
@@ -328,8 +317,7 @@ public class LogicaJuegoServidor implements ControladorJuegoServidor {
 		} else {
 			System.out.println("J" + (indice + 1) + " (" + jugador.getNombre() + ") " + "perdio vida (quedan "
 					+ jugador.getVidas() + ")");
-
-			// Resetear posición
+			
 			float[] posiciones = calcularPosicionesIniciales();
 			float posX = posiciones[indice * 2];
 			float posY = posiciones[indice * 2 + 1];
@@ -347,14 +335,12 @@ public class LogicaJuegoServidor implements ControladorJuegoServidor {
 		int maxPuntos = -1;
 		int ganadorPorPuntos = -1;
 
-		// Contar jugadores vivos y encontrar al de mayor puntuación
 		for (int i = 0; i < numeroJugadoresActivos; i++) {
 			if (jugadores[i] != null && jugadores[i].getVidas() > 0) {
 				jugadoresVivos++;
 				ultimoVivo = i;
 			}
 			
-			// Buscar al de mayor puntuación (incluyendo muertos)
 			if (jugadores[i] != null) {
 				if (jugadores[i].getPuntuacion() > maxPuntos) {
 					maxPuntos = jugadores[i].getPuntuacion();
@@ -363,29 +349,24 @@ public class LogicaJuegoServidor implements ControladorJuegoServidor {
 			}
 		}
 
-		// ✅ CORREGIDO: Sistema de victoria mejorado
 		if (jugadoresVivos <= 1 && numeroJugadoresActivos > 1) {
 			int ganador;
 			
 			if (jugadoresVivos == 1) {
-				// Hay un único sobreviviente
 				ganador = ultimoVivo + 1;
 				System.out.println("Ganador por supervivencia: J" + ganador);
 			} else if (jugadoresVivos == 0) {
-				// Empate por muerte simultánea - gana quien tenga más puntos
 				System.out.println("¡EMPATE! Determinando ganador por puntuación...");
 				
-				// Verificar si hay empate en puntos también
 				int contadorMaxPuntos = 0;
 				for (int i = 0; i < numeroJugadoresActivos; i++) {
 					if (jugadores[i] != null && jugadores[i].getPuntuacion() == maxPuntos) {
 						contadorMaxPuntos++;
-						ganadorPorPuntos = i; // Último con max puntos
+						ganadorPorPuntos = i; 
 					}
 				}
 				
 				if (contadorMaxPuntos > 1) {
-					// Empate total - gana el primer jugador por defecto
 					ganador = 1;
 					System.out.println("¡EMPATE TOTAL! Gana J1 por defecto");
 				} else {
@@ -393,7 +374,7 @@ public class LogicaJuegoServidor implements ControladorJuegoServidor {
 					System.out.println("Ganador por puntos: J" + ganador + " (" + maxPuntos + " pts)");
 				}
 			} else {
-				ganador = 1; // Fallback (no debería llegar aquí)
+				ganador = 1; 
 			}
 			
 			terminarJuego(ganador);
@@ -410,12 +391,10 @@ public class LogicaJuegoServidor implements ControladorJuegoServidor {
 			temporizadorJuego = null;
 		}
 
-		// ✅ CORREGIDO: Verificar que el ganador es válido antes de acceder al array
 		hiloServidor.enviarMensajeATodos("JuegoTerminado:" + ganador);
 		
 		System.out.println("===================================");
 		
-		// Verificar que el índice del ganador es válido
 		if (ganador >= 1 && ganador <= numeroJugadoresActivos && jugadores[ganador - 1] != null) {
 			System.out.println("Juego terminado. Ganador: J" + ganador + " (" + jugadores[ganador - 1].getNombre() + ")");
 		} else {

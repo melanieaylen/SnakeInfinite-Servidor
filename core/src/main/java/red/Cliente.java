@@ -2,9 +2,6 @@ package red;
 
 import java.net.InetAddress;
 
-/**
- * Clase que representa a un cliente conectado al servidor
- */
 public class Cliente {
 
     private String id;

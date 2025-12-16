@@ -1,8 +1,5 @@
 package elementos;
 
-/**
- * SerpienteServidor - Versión sin LibGDX para el servidor
- */
 public class SerpienteServidor {
     private int ancho, alto;
     private float[][] posiciones;
@@ -22,17 +19,14 @@ public class SerpienteServidor {
         float ultimaX = posiciones[tamanioActual - 1][0];
         float ultimaY = posiciones[tamanioActual - 1][1];
         
-        // Mover cuerpo
         for (int i = tamanioActual - 1; i > 0; i--) {
             posiciones[i][0] = posiciones[i - 1][0];
             posiciones[i][1] = posiciones[i - 1][1];
         }
         
-        // Mover cabeza
         posiciones[0][0] = nuevaX;
         posiciones[0][1] = nuevaY;
         
-        // Crecer si es necesario
         if (debeCrecer) {
             posiciones[tamanioActual][0] = ultimaX;
             posiciones[tamanioActual][1] = ultimaY;
@@ -65,9 +59,6 @@ public class SerpienteServidor {
         return false;
     }
     
-    /**
-     * Serializa todos los segmentos en formato: x1:y1,x2:y2,x3:y3,...
-     */
     public String serializar() {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < tamanioActual; i++) {
