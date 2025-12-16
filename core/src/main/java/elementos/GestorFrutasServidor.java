@@ -1,11 +1,15 @@
 package elementos;
 
+import jugadores.JugadorServidor;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
 /**
- * GestorFrutasServidor - Versión del gestor de frutas SIN dependencias de LibGDX
+ * ✅ MEJORADO: 
+ * - Verifica colisiones con TODAS las serpientes
+ * - No permite frutas superpuestas
+ * - Inicialización mejorada
  */
 public class GestorFrutasServidor {
     
@@ -20,21 +24,47 @@ public class GestorFrutasServidor {
     }
     
     /**
-     * Inicializa todas las frutas del juego
+     * ✅ NUEVO: Inicializa frutas verificando TODAS las serpientes
      */
-    public void inicializarFrutas(SerpienteServidor serpiente) {
+    public void inicializarFrutasConJugadores(JugadorServidor[] jugadores, int numJugadores) {
+        System.out.println("🍎 Inicializando frutas...");
+        
+        // Crear todas las frutas
         for (TipoFruta tipo : TipoFruta.values()) {
             FrutaServidor fruta = new FrutaServidor(0, 0, tamanioElementos, tamanioElementos, tipo);
-            moverFrutaAleatoria(fruta, serpiente);
             frutas.add(fruta);
         }
-        System.out.println("✅ Inicializadas " + frutas.size() + " frutas");
+        
+        // Posicionar cada fruta verificando colisiones con todas las serpientes
+        for (int i = 0; i < frutas.size(); i++) {
+            FrutaServidor fruta = frutas.get(i);
+            moverFrutaAleatoriaConJugadores(fruta, jugadores, numJugadores);
+            System.out.println("   ✅ " + fruta.getTipo() + " en (" + fruta.getPosX() + ", " + fruta.getPosY() + ")");
+        }
+        
+        System.out.println("✅ " + frutas.size() + " frutas inicializadas");
     }
     
     /**
-     * Verifica si una serpiente colisionó con alguna fruta
-     * @return La fruta colisionada o null
+     * ✅ COMPATIBILIDAD: Para un solo jugador (modo solitario)
      */
+    public void inicializarFrutas(SerpienteServidor serpiente) {
+        System.out.println("🍎 Inicializando frutas (modo solitario)...");
+        
+        for (TipoFruta tipo : TipoFruta.values()) {
+            FrutaServidor fruta = new FrutaServidor(0, 0, tamanioElementos, tamanioElementos, tipo);
+            frutas.add(fruta);
+        }
+        
+        for (int i = 0; i < frutas.size(); i++) {
+            FrutaServidor fruta = frutas.get(i);
+            moverFrutaAleatoria(fruta, serpiente);
+            System.out.println("   ✅ " + fruta.getTipo() + " en (" + fruta.getPosX() + ", " + fruta.getPosY() + ")");
+        }
+        
+        System.out.println("✅ " + frutas.size() + " frutas inicializadas");
+    }
+    
     public FrutaServidor verificarColisiones(SerpienteServidor serpiente) {
         for (FrutaServidor fruta : frutas) {
             if (fruta.colisionaConPosicion(serpiente.getPosX(), serpiente.getPosY())) {
@@ -45,19 +75,62 @@ public class GestorFrutasServidor {
     }
     
     /**
-     * Reubica una fruta después de ser comida
+     * ✅ NUEVO: Reubicar verificando TODOS los jugadores
+     */
+    public void reubicarFrutaConJugadores(FrutaServidor fruta, JugadorServidor[] jugadores, int numJugadores) {
+        moverFrutaAleatoriaConJugadores(fruta, jugadores, numJugadores);
+    }
+    
+    /**
+     * Reubicar con una sola serpiente (compatibilidad)
      */
     public void reubicarFruta(FrutaServidor fruta, SerpienteServidor serpiente) {
         moverFrutaAleatoria(fruta, serpiente);
     }
     
     /**
-     * Mueve una fruta a una posición aleatoria válida
+     * ✅ CRÍTICO: Mueve fruta verificando TODAS las serpientes activas
+     */
+    private void moverFrutaAleatoriaConJugadores(FrutaServidor fruta, JugadorServidor[] jugadores, int numJugadores) {
+        int rangoMin = -15;
+        int rangoMax = 25;
+        float nuevaX, nuevaY;
+        int intentos = 0;
+        int maxIntentos = 300;
+        
+        // Usar la primera serpiente como referencia
+        SerpienteServidor serpienteRef = jugadores[0].getSerpiente();
+        
+        do {
+            int offsetX = random.nextInt(rangoMax - rangoMin + 1) + rangoMin;
+            int offsetY = random.nextInt(rangoMax - rangoMin + 1) + rangoMin;
+            
+            nuevaX = serpienteRef.getPosX() + (offsetX * tamanioElementos);
+            nuevaY = serpienteRef.getPosY() + (offsetY * tamanioElementos);
+            
+            intentos++;
+            
+            if (intentos >= maxIntentos) {
+                System.out.println("⚠️ Usando posición alejada tras " + intentos + " intentos");
+                nuevaX = serpienteRef.getPosX() + ((random.nextInt(60) - 30) * tamanioElementos);
+                nuevaY = serpienteRef.getPosY() + ((random.nextInt(60) - 30) * tamanioElementos);
+                break;
+            }
+            
+        } while (posicionOcupadaConJugadores(nuevaX, nuevaY, fruta, jugadores, numJugadores));
+        
+        fruta.reubicar(nuevaX, nuevaY);
+    }
+    
+    /**
+     * Mover fruta con una sola serpiente (compatibilidad)
      */
     private void moverFrutaAleatoria(FrutaServidor fruta, SerpienteServidor serpiente) {
-        int rangoMin = -10;
-        int rangoMax = 20;
+        int rangoMin = -15;
+        int rangoMax = 25;
         float nuevaX, nuevaY;
+        int intentos = 0;
+        int maxIntentos = 300;
         
         do {
             int offsetX = random.nextInt(rangoMax - rangoMin + 1) + rangoMin;
@@ -66,15 +139,62 @@ public class GestorFrutasServidor {
             nuevaX = serpiente.getPosX() + (offsetX * tamanioElementos);
             nuevaY = serpiente.getPosY() + (offsetY * tamanioElementos);
             
-        } while (serpiente.colisionConPosicion(nuevaX, nuevaY));
+            intentos++;
+            
+            if (intentos >= maxIntentos) {
+                nuevaX = serpiente.getPosX() + ((random.nextInt(60) - 30) * tamanioElementos);
+                nuevaY = serpiente.getPosY() + ((random.nextInt(60) - 30) * tamanioElementos);
+                break;
+            }
+            
+        } while (posicionOcupada(nuevaX, nuevaY, fruta, serpiente));
         
         fruta.reubicar(nuevaX, nuevaY);
     }
     
     /**
-     * Serializa todas las frutas para enviar al cliente
-     * Formato: "TIPO:X:Y|TIPO:X:Y|..."
+     * ✅ CRÍTICO: Verifica si una posición está ocupada por CUALQUIER serpiente
      */
+    private boolean posicionOcupadaConJugadores(float x, float y, FrutaServidor frutaActual, 
+                                                 JugadorServidor[] jugadores, int numJugadores) {
+        // 1. Verificar colisión con TODAS las serpientes vivas
+        for (int i = 0; i < numJugadores; i++) {
+            if (jugadores[i] != null && jugadores[i].getVidas() > 0) {
+                if (jugadores[i].getSerpiente().colisionConPosicion(x, y)) {
+                    return true;
+                }
+            }
+        }
+        
+        // 2. Verificar colisión con OTRAS frutas (no consigo misma)
+        for (FrutaServidor otraFruta : frutas) {
+            if (otraFruta != frutaActual && otraFruta.colisionaConPosicion(x, y)) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Verificar ocupación con una sola serpiente (compatibilidad)
+     */
+    private boolean posicionOcupada(float x, float y, FrutaServidor frutaActual, SerpienteServidor serpiente) {
+        // 1. Verificar colisión con la serpiente
+        if (serpiente.colisionConPosicion(x, y)) {
+            return true;
+        }
+        
+        // 2. Verificar colisión con OTRAS frutas
+        for (FrutaServidor otraFruta : frutas) {
+            if (otraFruta != frutaActual && otraFruta.colisionaConPosicion(x, y)) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
     public String serializar() {
         StringBuilder sb = new StringBuilder();
         boolean primera = true;
@@ -90,7 +210,6 @@ public class GestorFrutasServidor {
         return sb.toString();
     }
     
-    // Getter
     public List<FrutaServidor> getFrutas() {
         return frutas;
     }

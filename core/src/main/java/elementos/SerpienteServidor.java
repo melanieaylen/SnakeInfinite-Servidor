@@ -1,14 +1,12 @@
 package elementos;
 
 /**
- * SerpienteServidor - Versión de Serpiente SIN dependencias de LibGDX
- * Solo maneja la lógica, no el renderizado
+ * SerpienteServidor - Versión sin LibGDX para el servidor
  */
 public class SerpienteServidor {
     private int ancho, alto;
     private float[][] posiciones;
-    private int tamanioMaximo = 1000;
-    private int tamanioActual;
+    private int tamanioMaximo = 1000, tamanioActual;
     private boolean debeCrecer = false;
     
     public SerpienteServidor(float posX, float posY, int ancho, int alto) {
@@ -20,9 +18,6 @@ public class SerpienteServidor {
         tamanioActual = 1;
     }
     
-    /**
-     * Mueve la serpiente a una nueva posición
-     */
     public void mover(float nuevaX, float nuevaY) {
         float ultimaX = posiciones[tamanioActual - 1][0];
         float ultimaY = posiciones[tamanioActual - 1][1];
@@ -37,7 +32,7 @@ public class SerpienteServidor {
         posiciones[0][0] = nuevaX;
         posiciones[0][1] = nuevaY;
         
-        // Crecer si debe
+        // Crecer si es necesario
         if (debeCrecer) {
             posiciones[tamanioActual][0] = ultimaX;
             posiciones[tamanioActual][1] = ultimaY;
@@ -46,31 +41,21 @@ public class SerpienteServidor {
         }
     }
     
-    /**
-     * Marca la serpiente para crecer en el siguiente movimiento
-     */
     public void crecer() {
         if (tamanioActual < tamanioMaximo) {
             debeCrecer = true;
         }
     }
     
-    /**
-     * Verifica colisión de la cabeza consigo misma
-     */
     public boolean colisionSerpiente() {
         for (int i = 1; i < tamanioActual; i++) {
-            if (posiciones[0][0] == posiciones[i][0] && 
-                posiciones[0][1] == posiciones[i][1]) {
+            if (posiciones[0][0] == posiciones[i][0] && posiciones[0][1] == posiciones[i][1]) {
                 return true;
             }
         }
         return false;
     }
     
-    /**
-     * Verifica si algún segmento está en una posición específica
-     */
     public boolean colisionConPosicion(float x, float y) {
         for (int i = 0; i < tamanioActual; i++) {
             if (posiciones[i][0] == x && posiciones[i][1] == y) {
@@ -81,32 +66,17 @@ public class SerpienteServidor {
     }
     
     /**
-     * Obtiene todos los segmentos de la serpiente
-     * @return Array de formato [[x1,y1], [x2,y2], ...]
-     */
-    public float[][] obtenerSegmentos() {
-        float[][] segmentos = new float[tamanioActual][2];
-        for (int i = 0; i < tamanioActual; i++) {
-            segmentos[i][0] = posiciones[i][0];
-            segmentos[i][1] = posiciones[i][1];
-        }
-        return segmentos;
-    }
-    
-    /**
-     * Serializa la serpiente completa para enviar al cliente
-     * Formato: "x1:y1,x2:y2,x3:y3,..."
+     * Serializa todos los segmentos en formato: x1:y1,x2:y2,x3:y3,...
      */
     public String serializar() {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < tamanioActual; i++) {
             if (i > 0) sb.append(",");
-            sb.append((int)posiciones[i][0]).append(":").append((int)posiciones[i][1]);
+            sb.append(posiciones[i][0]).append(":").append(posiciones[i][1]);
         }
         return sb.toString();
     }
     
-    // Getters
     public int getAncho() {
         return ancho;
     }

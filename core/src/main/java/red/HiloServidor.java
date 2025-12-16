@@ -6,29 +6,38 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 
 import elementos.Direcciones;
 import interfaces.ControladorJuegoServidor;
+import logica.LogicaJuegoServidor;
 
-/**
- * HiloServidor - Hilo del servidor que maneja la red
- */
 public class HiloServidor extends Thread {
 
     private DatagramSocket conexion;
     private int puertoServidor = 9998;
     private boolean fin = false;
-    private final int MAX_CLIENTES = 2;
+    private final int MIN_JUGADORES = 2;
+    private final int MAX_JUGADORES = 4;
     private int clientesConectados = 0;
     private ArrayList<Cliente> clientes = new ArrayList<>();
     private ControladorJuegoServidor controladorJuego;
+    
+    private Map<String, Long> ultimoMensajeCliente = new HashMap<>();
+    // ✅ CAMBIO CRÍTICO: Timeout aumentado de 3 a 10 segundos
+    private static final long TIMEOUT_DESCONEXION = 10000; 
+    
+    private Map<Integer, String> nombresJugadores = new HashMap<>();
 
     public HiloServidor(ControladorJuegoServidor controladorJuego) {
         this.controladorJuego = controladorJuego;
         try {
             conexion = new DatagramSocket(puertoServidor);
+            conexion.setSoTimeout(1000);
             System.out.println("✅ Servidor iniciado en puerto " + puertoServidor);
-            System.out.println("📡 Esperando conexiones de clientes...");
+            System.out.println("📊 Configuración: " + MIN_JUGADORES + "-" + MAX_JUGADORES + " jugadores");
+            System.out.println("⏱️ Timeout de desconexión: " + (TIMEOUT_DESCONEXION/1000) + " segundos");
         } catch (SocketException e) {
             System.err.println("❌ Error al crear socket del servidor");
             e.printStackTrace();
@@ -38,119 +47,198 @@ public class HiloServidor extends Thread {
     @Override
     public void run() {
         System.out.println("👂 Servidor escuchando conexiones...");
-        do {
+        
+        while (!fin) {
             DatagramPacket paquete = new DatagramPacket(new byte[1024], 1024);
             try {
                 conexion.receive(paquete);
                 procesarMensaje(paquete);
+            } catch (java.net.SocketTimeoutException e) {
+                verificarDesconexiones();
             } catch (IOException e) {
                 if (!fin) {
                     System.err.println("⚠️ Error al recibir paquete");
                 }
             }
-        } while (!fin);
+        }
+        
         System.out.println("✅ Servidor detenido");
     }
+    
+    private void verificarDesconexiones() {
+        long tiempoActual = System.currentTimeMillis();
+        
+        // Limpiar entradas de clientes que ya no existen
+        ultimoMensajeCliente.entrySet().removeIf(entry -> {
+            boolean existe = false;
+            for (Cliente c : clientes) {
+                if (c.obtenerId().equals(entry.getKey())) {
+                    existe = true;
+                    break;
+                }
+            }
+            return !existe;
+        });
+        
+        // Verificar timeouts
+        for (Cliente cliente : new ArrayList<>(clientes)) {
+            Long ultimoMensaje = ultimoMensajeCliente.get(cliente.obtenerId());
+            
+            if (ultimoMensaje != null) {
+                long tiempoSinMensaje = tiempoActual - ultimoMensaje;
+                
+                if (tiempoSinMensaje > TIMEOUT_DESCONEXION) {
+                    System.err.println("❌ Cliente " + cliente.obtenerNumero() + " (" + 
+                                     obtenerNombreJugador(cliente.obtenerNumero()) + 
+                                     ") sin respuesta por " + (tiempoSinMensaje/1000) + "s - eliminado");
+                    eliminarCliente(cliente);
+                }
+            }
+        }
+    }
+    
+    private void eliminarCliente(Cliente cliente) {
+        int numeroJugador = cliente.obtenerNumero();
+        clientes.remove(cliente);
+        clientesConectados--;
+        ultimoMensajeCliente.remove(cliente.obtenerId());
+        
+        enviarMensajeATodos("JugadorDesconectado:" + numeroJugador);
+        controladorJuego.jugadorDesconectado(numeroJugador);
+        
+        System.out.println("📊 Jugadores: " + clientesConectados + "/" + MAX_JUGADORES);
+    }
 
-    /**
-     * Procesa los mensajes recibidos de los clientes
-     */
     private void procesarMensaje(DatagramPacket paquete) {
         String mensaje = (new String(paquete.getData())).trim();
-        String[] partes = mensaje.split(":");
+        
+        // ✅ CAMBIO CRÍTICO: Actualizar timestamp para TODOS los mensajes (no solo Heartbeat)
         int indice = buscarIndiceCliente(paquete);
+        if (indice != -1) {
+            Cliente cliente = clientes.get(indice);
+            ultimoMensajeCliente.put(cliente.obtenerId(), System.currentTimeMillis());
+        }
+        
+        // Heartbeat - solo actualizar timestamp (ya lo hicimos arriba)
+        if (mensaje.equals("Heartbeat")) {
+            return;
+        }
+        
+        String[] partes = mensaje.split(":", 2);
 
-        System.out.println("📨 [" + paquete.getAddress().getHostAddress() + "] " + mensaje);
+        // Log de mensajes importantes (no movimientos ni heartbeats)
+        if (!mensaje.equals("Heartbeat") && !partes[0].equals("Mover")) {
+            System.out.println("📨 [Cliente #" + (indice + 1) + "] " + 
+                             mensaje.substring(0, Math.min(60, mensaje.length())));
+        }
 
-        // Comando Conectar
         if (partes[0].equals("Conectar")) {
-            manejarConexion(paquete, indice);
+            manejarConexion(paquete, indice, partes.length > 1 ? partes[1] : "Jugador");
             return;
         }
 
-        // Comando Desconectar
         if (partes[0].equals("Desconectar")) {
             manejarDesconexion(paquete, indice);
             return;
         }
 
-        // Si el cliente no está conectado, ignorar otros mensajes
         if (indice == -1) {
-            System.out.println("⚠️ Cliente no conectado, ignorando mensaje");
-            enviarMensaje("NoConectado", paquete.getAddress(), paquete.getPort());
+            System.out.println("⚠️ Mensaje de cliente desconocido ignorado");
             return;
         }
 
-        // Otros comandos (requieren estar conectado)
         Cliente cliente = clientes.get(indice);
-        switch (partes[0]) {
+        String comando = partes[0];
+        String datos = partes.length > 1 ? partes[1] : "";
+        
+        switch (comando) {
             case "Mover":
-                if (partes.length >= 2) {
-                    manejarMovimiento(cliente, partes[1]);
-                }
+                manejarMovimiento(cliente, datos);
                 break;
             default:
-                System.out.println("⚠️ Comando desconocido: " + partes[0]);
+                System.out.println("⚠️ Comando desconocido: " + comando);
         }
     }
 
-    /**
-     * Maneja la conexión de un nuevo cliente
-     */
-    private void manejarConexion(DatagramPacket paquete, int indice) {
-        // Ya está conectado
+    private void manejarConexion(DatagramPacket paquete, int indice, String nombre) {
         if (indice != -1) {
-            System.out.println("⚠️ Cliente ya conectado");
-            enviarMensaje("YaConectado", paquete.getAddress(), paquete.getPort());
+            Cliente cliente = clientes.get(indice);
+            System.out.println("🔄 Cliente ya conectado - Reconfirmando Jugador #" + cliente.obtenerNumero());
+            
+            ultimoMensajeCliente.put(cliente.obtenerId(), System.currentTimeMillis());
+            enviarMensaje("Conectado:" + cliente.obtenerNumero() + ":" + obtenerNombreJugador(cliente.obtenerNumero()), 
+                         paquete.getAddress(), paquete.getPort());
+            
+            enviarListaNombresATodos();
+            
+            if (controladorJuego.estaJuegoIniciado()) {
+                enviarMensaje("Iniciar", paquete.getAddress(), paquete.getPort());
+            }
             return;
         }
 
-        // Servidor lleno
-        if (clientesConectados >= MAX_CLIENTES) {
-            System.out.println("⚠️ Servidor lleno (2/2 jugadores)");
+        if (clientesConectados >= MAX_JUGADORES) {
+            System.out.println("⚠️ Servidor lleno (" + MAX_JUGADORES + "/" + MAX_JUGADORES + ")");
             enviarMensaje("Lleno", paquete.getAddress(), paquete.getPort());
             return;
         }
 
-        // Conectar nuevo cliente
+        // Nueva conexión
         clientesConectados++;
         Cliente nuevoCliente = new Cliente(clientesConectados, paquete.getAddress(), paquete.getPort());
         clientes.add(nuevoCliente);
-        enviarMensaje("Conectado:" + clientesConectados, paquete.getAddress(), paquete.getPort());
         
-        System.out.println("✅ " + nuevoCliente + " conectado desde " + 
-                         paquete.getAddress().getHostAddress());
-        System.out.println("📊 Jugadores conectados: " + clientesConectados + "/" + MAX_CLIENTES);
+        String id = nuevoCliente.obtenerId();
+        ultimoMensajeCliente.put(id, System.currentTimeMillis());
+        
+        String nombreFinal = (nombre == null || nombre.trim().isEmpty()) ? 
+                            ("Jugador " + clientesConectados) : nombre.trim();
+        nombresJugadores.put(clientesConectados, nombreFinal);
+        
+        enviarMensaje("Conectado:" + clientesConectados + ":" + nombreFinal, 
+                     paquete.getAddress(), paquete.getPort());
+        
+        System.out.println("✅ " + nombreFinal + " (#" + clientesConectados + ") conectado");
+        System.out.println("📊 Jugadores conectados: " + clientesConectados + "/" + MAX_JUGADORES);
 
-        // Si hay 2 jugadores, iniciar el juego
-        if (clientesConectados == MAX_CLIENTES) {
-            System.out.println("🎮 ¡Todos los jugadores conectados! Iniciando partida...");
-            enviarMensajeATodos("Iniciar");
-            controladorJuego.iniciarJuego();
+        enviarListaNombresATodos();
+        
+        if (clientesConectados >= MIN_JUGADORES && !controladorJuego.estaJuegoIniciado()) {
+            if (controladorJuego instanceof LogicaJuegoServidor) {
+                ((LogicaJuegoServidor) controladorJuego).programarInicioJuego();
+            }
         }
     }
 
-    /**
-     * Maneja la desconexión de un cliente
-     */
+    private void enviarListaNombresATodos() {
+        StringBuilder sb = new StringBuilder("ActualizarNombres:");
+        for (int i = 1; i <= MAX_JUGADORES; i++) {
+            if (i > 1) sb.append("|");
+            String nombre = nombresJugadores.get(i);
+            sb.append(nombre != null ? nombre : "");
+        }
+        
+        String mensaje = sb.toString();
+        enviarMensajeATodos(mensaje);
+    }
+
     private void manejarDesconexion(DatagramPacket paquete, int indice) {
         if (indice == -1) {
+            System.out.println("⚠️ Cliente no encontrado para desconectar");
             return;
         }
 
         Cliente cliente = clientes.get(indice);
-        int numeroJugador = cliente.obtenerNumero();
-        clientes.remove(indice);
-        clientesConectados--;
-
-        System.out.println("🔌 " + cliente + " desconectado");
-        enviarMensajeATodos("JugadorDesconectado:" + numeroJugador);
-        controladorJuego.jugadorDesconectado(numeroJugador);
+        System.out.println("👋 " + obtenerNombreJugador(cliente.obtenerNumero()) + " desconectado");
+        
+        eliminarCliente(cliente);
+        
+        if (clientesConectados == 0) {
+            System.out.println("⏳ Todos los clientes desconectados");
+            System.out.println("⏳ Esperando nuevos jugadores...");
+        }
     }
 
-    /**
-     * Maneja el movimiento de un jugador
-     */
     private void manejarMovimiento(Cliente cliente, String direccionStr) {
         try {
             Direcciones direccion = Direcciones.valueOf(direccionStr);
@@ -160,55 +248,49 @@ public class HiloServidor extends Thread {
         }
     }
 
-    /**
-     * Encuentra el índice de un cliente en la lista
-     */
     private int buscarIndiceCliente(DatagramPacket paquete) {
-        String id = paquete.getAddress().toString() + ":" + paquete.getPort();
+        InetAddress ip = paquete.getAddress();
+        int puerto = paquete.getPort();
+        String idCompleto = ip.toString() + ":" + puerto;
+        
         for (int i = 0; i < clientes.size(); i++) {
-            if (id.equals(clientes.get(i).obtenerId())) {
+            if (idCompleto.equals(clientes.get(i).obtenerId())) {
                 return i;
             }
         }
+        
         return -1;
     }
 
-    /**
-     * Envía un mensaje a un cliente específico
-     */
     public void enviarMensaje(String mensaje, InetAddress ipCliente, int puertoCliente) {
         byte[] datosMensaje = mensaje.getBytes();
         DatagramPacket paquete = new DatagramPacket(datosMensaje, datosMensaje.length, ipCliente, puertoCliente);
         try {
             conexion.send(paquete);
-            // System.out.println("📤 Enviado a " + ipCliente.getHostAddress() + ": " + mensaje);
         } catch (IOException e) {
             System.err.println("❌ Error al enviar mensaje: " + mensaje);
         }
     }
 
-    /**
-     * Envía un mensaje a todos los clientes conectados
-     */
     public void enviarMensajeATodos(String mensaje) {
-        for (Cliente cliente : clientes) {
+        ArrayList<Cliente> clientesCopia = new ArrayList<>(clientes);
+        for (Cliente cliente : clientesCopia) {
             enviarMensaje(mensaje, cliente.obtenerIp(), cliente.obtenerPuerto());
         }
     }
 
-    /**
-     * Desconecta todos los clientes
-     */
-    public void desconectarClientes() {
-        enviarMensajeATodos("Desconectar");
+    public void desconectarClientesYResetear() {
+        if (clientes.size() > 0) {
+            enviarMensajeATodos("Desconectar");
+        }
         clientes.clear();
         clientesConectados = 0;
-        System.out.println("✅ Todos los clientes desconectados");
+        ultimoMensajeCliente.clear();
+        nombresJugadores.clear();
+        System.out.println("✅ Todos los clientes desconectados - Servidor reseteado");
+        System.out.println("⏳ Esperando nuevos jugadores...");
     }
 
-    /**
-     * Termina el servidor
-     */
     public void terminar() {
         this.fin = true;
         if (conexion != null && !conexion.isClosed()) {
@@ -218,17 +300,19 @@ public class HiloServidor extends Thread {
         System.out.println("✅ Hilo del servidor terminado");
     }
 
-    /**
-     * Obtiene la lista de clientes conectados
-     */
     public ArrayList<Cliente> obtenerClientes() {
         return clientes;
     }
 
-    /**
-     * Obtiene el número de clientes conectados
-     */
     public int obtenerClientesConectados() {
         return clientesConectados;
+    }
+    
+    public String obtenerNombreJugador(int numeroJugador) {
+        return nombresJugadores.getOrDefault(numeroJugador, "Jugador " + numeroJugador);
+    }
+    
+    public Map<Integer, String> obtenerTodosLosNombres() {
+        return new HashMap<>(nombresJugadores);
     }
 }

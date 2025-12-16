@@ -3,8 +3,7 @@ package interfaces;
 import elementos.Direcciones;
 
 /**
- * Interfaz específica para el controlador del servidor
- * Tiene solo los métodos que el servidor realmente necesita
+ * Interfaz para el controlador del servidor
  */
 public interface ControladorJuegoServidor {
     
@@ -15,7 +14,7 @@ public interface ControladorJuegoServidor {
     
     /**
      * Mueve un jugador específico
-     * @param numeroJugador Número del jugador (1 o 2)
+     * @param numeroJugador Número del jugador (1-4)
      * @param direccion Dirección del movimiento
      */
     void moverJugador(int numeroJugador, Direcciones direccion);
@@ -25,4 +24,10 @@ public interface ControladorJuegoServidor {
      * @param numeroJugador Número del jugador desconectado
      */
     void jugadorDesconectado(int numeroJugador);
+    
+    /**
+     * ✅ NUEVO: Verifica si el juego ya está iniciado
+     * @return true si el juego está en curso
+     */
+    boolean estaJuegoIniciado();
 }

@@ -4,7 +4,7 @@ import elementos.Direcciones;
 import elementos.SerpienteServidor;
 
 /**
- * JugadorServidor - Versión del jugador SIN dependencias de LibGDX
+ * JugadorServidor - VersiÃ³n del jugador SIN dependencias de LibGDX
  * Usado en el servidor
  */
 public class JugadorServidor {
@@ -33,7 +33,7 @@ public class JugadorServidor {
     }
     
     /**
-     * Añade puntos al jugador
+     * AÃ±ade puntos al jugador
      */
     public void agregarPuntos(int puntos) {
         this.puntuacion += puntos;
@@ -48,7 +48,7 @@ public class JugadorServidor {
     
     /**
      * Pierde una vida
-     * @return true si todavía tiene vidas, false si es Game Over
+     * @return true si todavÃ­a tiene vidas, false si es Game Over
      */
     public boolean perderVida() {
         vidas--;
@@ -81,7 +81,7 @@ public class JugadorServidor {
     }
     
     /**
-     * Resetea al jugador a la posición inicial
+     * Resetea al jugador a la posiciÃ³n inicial
      */
     public void resetearPosicion(float posX, float posY, int ancho, int alto) {
         this.serpiente = new SerpienteServidor(posX, posY, ancho, alto);
@@ -89,11 +89,11 @@ public class JugadorServidor {
     }
     
     /**
-     * Cambia la dirección del jugador
-     * Previene movimientos en dirección opuesta
+     * Cambia la direcciÃ³n del jugador
+     * Previene movimientos en direcciÃ³n opuesta
      */
     public void cambiarDireccion(Direcciones nuevaDireccion) {
-        // No permitir dirección opuesta
+        // No permitir direcciÃ³n opuesta
         if (nuevaDireccion == Direcciones.ARRIBA && direccionActual != Direcciones.ABAJO) {
             direccionActual = nuevaDireccion;
         } else if (nuevaDireccion == Direcciones.ABAJO && direccionActual != Direcciones.ARRIBA) {

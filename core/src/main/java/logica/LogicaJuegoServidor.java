@@ -9,80 +9,168 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 /**
- * LogicaJuegoServidor - Lógica autoritativa del servidor
- * Controla TODO el estado del juego SIN dependencias de LibGDX
+ * ✅ CORREGIDO COMPLETAMENTE:
+ * - Verifica colisiones para TODOS los jugadores (incluidos 3 y 4)
+ * - Debugging mejorado para identificar problemas
+ * - Inicialización robusta
  */
 public class LogicaJuegoServidor implements ControladorJuegoServidor {
 
-    // CONSTANTES
     private final int TAMANIO_ELEMENTOS = 30;
-    private final float VELOCIDAD_SERPIENTE = 120; // ms entre movimientos
-    private final int NUM_JUGADORES = 2;
+    private final float VELOCIDAD_SERPIENTE = 120; // ms
+    private final int MAX_JUGADORES = 4;
+    private final int TIEMPO_ESPERA_INICIO = 5000;
 
-    // RED
     private HiloServidor hiloServidor;
-
-    // JUGADORES
     private JugadorServidor[] jugadores;
     private float[] posicionesX;
     private float[] posicionesY;
-
-    // ELEMENTOS
     private GestorFrutasServidor gestorFrutas;
 
-    // ESTADO
     private boolean juegoIniciado = false;
     private boolean juegoTerminado = false;
     private Timer temporizadorJuego;
+    private Timer temporizadorEspera;
+    private int numeroJugadoresActivos = 0;
+    
+    private int contadorActualizaciones = 0;
 
     public LogicaJuegoServidor() {
-        // Inicializar servidor
         hiloServidor = new HiloServidor(this);
         hiloServidor.start();
 
-        // Inicializar arrays
-        jugadores = new JugadorServidor[NUM_JUGADORES];
-        posicionesX = new float[NUM_JUGADORES];
-        posicionesY = new float[NUM_JUGADORES];
+        jugadores = new JugadorServidor[MAX_JUGADORES];
+        posicionesX = new float[MAX_JUGADORES];
+        posicionesY = new float[MAX_JUGADORES];
 
         System.out.println("✅ Lógica del servidor inicializada");
-        System.out.println("⏳ Esperando jugadores...");
+        System.out.println("⏳ Esperando jugadores (mínimo 2, máximo 4)...");
+    }
+
+    public void programarInicioJuego() {
+        if (temporizadorEspera != null) {
+            temporizadorEspera.cancel();
+        }
+        
+        int jugadoresConectados = hiloServidor.obtenerClientesConectados();
+        
+        System.out.println("═══════════════════════════════════");
+        System.out.println("🎮 HAY " + jugadoresConectados + " JUGADORES CONECTADOS");
+        System.out.println("⏳ ESPERANDO " + (TIEMPO_ESPERA_INICIO/1000) + " SEGUNDOS...");
+        System.out.println("   (Se pueden unir más jugadores)");
+        System.out.println("═══════════════════════════════════");
+        
+        temporizadorEspera = new Timer();
+        temporizadorEspera.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                if (!juegoIniciado && !juegoTerminado && hiloServidor.obtenerClientesConectados() >= 2) {
+                    iniciarJuego();
+                }
+            }
+        }, TIEMPO_ESPERA_INICIO);
     }
 
     @Override
     public void iniciarJuego() {
-        System.out.println("🎮 Iniciando juego...");
-
-        // Inicializar jugadores
-        for (int i = 0; i < NUM_JUGADORES; i++) {
-            float posX = (i == 0) ? -300 : 300; // Separar jugadores
-            float posY = 0;
+        if (juegoIniciado) {
+            System.out.println("⚠️ El juego ya está iniciado");
+            return;
+        }
+        
+        if (temporizadorEspera != null) {
+            temporizadorEspera.cancel();
+            temporizadorEspera = null;
+        }
+        
+        System.out.println("═══════════════════════════════════");
+        System.out.println("🎮 INICIANDO JUEGO...");
+        
+        numeroJugadoresActivos = hiloServidor.obtenerClientesConectados();
+        System.out.println("👥 Jugadores activos: " + numeroJugadoresActivos);
+        
+        if (numeroJugadoresActivos < 2) {
+            System.err.println("❌ ERROR: Se requieren mínimo 2 jugadores");
+            return;
+        }
+        
+        float[] posicionesIniciales = calcularPosicionesIniciales(numeroJugadoresActivos);
+        
+        System.out.println("📍 Inicializando jugadores:");
+        for (int i = 0; i < numeroJugadoresActivos; i++) {
+            float posX = posicionesIniciales[i * 2];
+            float posY = posicionesIniciales[i * 2 + 1];
             posicionesX[i] = posX;
             posicionesY[i] = posY;
+            
+            String nombreJugador = hiloServidor.obtenerNombreJugador(i + 1);
+            System.out.println("   " + (i + 1) + ". " + nombreJugador + " en (" + posX + ", " + posY + ")");
 
             SerpienteServidor serpiente = new SerpienteServidor(posX, posY, TAMANIO_ELEMENTOS, TAMANIO_ELEMENTOS);
-            jugadores[i] = new JugadorServidor(i + 1, "Jugador " + (i + 1), serpiente);
+            jugadores[i] = new JugadorServidor(i + 1, nombreJugador, serpiente);
         }
 
-        // Inicializar frutas
+        System.out.println("🍎 Inicializando frutas...");
         gestorFrutas = new GestorFrutasServidor(TAMANIO_ELEMENTOS);
-        gestorFrutas.inicializarFrutas(jugadores[0].getSerpiente());
+        gestorFrutas.inicializarFrutasConJugadores(jugadores, numeroJugadoresActivos);
 
-        // Enviar estado inicial
-        enviarEstadoCompleto();
-
-        // Iniciar loop del juego
         juegoIniciado = true;
+        juegoTerminado = false;
+        contadorActualizaciones = 0;
+        
+        try {
+            Thread.sleep(500);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        
+        System.out.println("📡 Enviando mensaje 'Iniciar' a todos los clientes...");
+        hiloServidor.enviarMensajeATodos("Iniciar");
+        
+        try {
+            Thread.sleep(300);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        
+        System.out.println("📡 Enviando estado inicial...");
+        enviarEstadoCompleto();
+        
         iniciarBucleJuego();
 
-        System.out.println("✅ Juego iniciado exitosamente");
-        System.out.println("🎯 Velocidad: " + VELOCIDAD_SERPIENTE + "ms por movimiento");
+        System.out.println("✅ ¡JUEGO INICIADO!");
+        System.out.println("═══════════════════════════════════");
+    }
+    
+    private float[] calcularPosicionesIniciales(int numJugadores) {
+        float[] posiciones = new float[numJugadores * 2];
+        
+        switch (numJugadores) {
+            case 2:
+                posiciones[0] = -300; posiciones[1] = 0;
+                posiciones[2] = 300;  posiciones[3] = 0;
+                break;
+            case 3:
+                posiciones[0] = -300; posiciones[1] = 200;
+                posiciones[2] = 300;  posiciones[3] = 200;
+                posiciones[4] = 0;    posiciones[5] = -200;
+                break;
+            case 4:
+                posiciones[0] = -300; posiciones[1] = 300;
+                posiciones[2] = 300;  posiciones[3] = 300;
+                posiciones[4] = -300; posiciones[5] = -300;
+                posiciones[6] = 300;  posiciones[7] = -300;
+                break;
+        }
+        
+        return posiciones;
     }
 
-    /**
-     * Inicia el bucle principal del juego
-     */
     private void iniciarBucleJuego() {
+        if (temporizadorJuego != null) {
+            temporizadorJuego.cancel();
+        }
+        
         temporizadorJuego = new Timer();
         temporizadorJuego.scheduleAtFixedRate(new TimerTask() {
             @Override
@@ -92,44 +180,49 @@ public class LogicaJuegoServidor implements ControladorJuegoServidor {
                 }
             }
         }, 0, (long) VELOCIDAD_SERPIENTE);
-        
-        System.out.println("🔄 Bucle del juego iniciado");
     }
 
-    /**
-     * Actualiza la lógica del juego (llamado cada VELOCIDAD_SERPIENTE ms)
-     */
     private void actualizarJuego() {
-        // Mover serpientes
-        for (int i = 0; i < NUM_JUGADORES; i++) {
-            if (jugadores[i] != null) {
+        contadorActualizaciones++;
+        
+        // ✅ DEBUGGING: Mostrar estado cada 50 actualizaciones
+        if (contadorActualizaciones % 50 == 0) {
+            System.out.println("\n⚙️ Actualización #" + contadorActualizaciones);
+            System.out.println("👥 Jugadores activos: " + numeroJugadoresActivos);
+            for (int i = 0; i < numeroJugadoresActivos; i++) {
+                if (jugadores[i] != null) {
+                    System.out.println("   J" + (i + 1) + " (" + jugadores[i].getNombre() + "): " +
+                                     "Pos(" + jugadores[i].getSerpiente().getPosX() + ", " + 
+                                     jugadores[i].getSerpiente().getPosY() + ") " +
+                                     "Dir=" + jugadores[i].getDireccionActual() + " " +
+                                     "Size=" + jugadores[i].getSerpiente().getTamanioActual() + " " +
+                                     "Vidas=" + jugadores[i].getVidas() + " " +
+                                     "Pts=" + jugadores[i].getPuntuacion());
+                }
+            }
+        }
+        
+        // ✅ CRÍTICO: Mover TODOS los jugadores activos
+        for (int i = 0; i < numeroJugadoresActivos; i++) {
+            if (jugadores[i] != null && jugadores[i].getVidas() > 0) {
                 moverSerpiente(i);
             }
         }
 
-        // Verificar colisiones con frutas
+        // ✅ CRÍTICO: Verificar colisiones para TODOS
         verificarColisionesFrutas();
-
-        // Verificar colisiones entre serpientes
         verificarColisionesSerpientes();
 
-        // Verificar invulnerabilidad
-        for (JugadorServidor jugador : jugadores) {
-            if (jugador != null) {
-                jugador.actualizarInvulnerabilidad(VELOCIDAD_SERPIENTE / 1000f);
+        for (int i = 0; i < numeroJugadoresActivos; i++) {
+            if (jugadores[i] != null) {
+                jugadores[i].actualizarInvulnerabilidad(VELOCIDAD_SERPIENTE / 1000f);
             }
         }
 
-        // Enviar actualizaciones a clientes
         enviarActualizacionesSerpientes();
-
-        // Verificar fin del juego
         verificarFinJuego();
     }
 
-    /**
-     * Mueve una serpiente según su dirección actual
-     */
     private void moverSerpiente(int indice) {
         JugadorServidor jugador = jugadores[indice];
         Direcciones direccion = jugador.getDireccionActual();
@@ -148,70 +241,100 @@ public class LogicaJuegoServidor implements ControladorJuegoServidor {
                 posicionesX[indice] -= TAMANIO_ELEMENTOS;
                 break;
             case NINGUNA:
-                return; // No mover si no hay dirección
+                return;
         }
 
         jugador.getSerpiente().mover(posicionesX[indice], posicionesY[indice]);
     }
 
     /**
-     * Verifica colisiones con frutas
+     * ✅ CRÍTICO: Verifica colisiones con frutas para TODOS los jugadores
      */
     private void verificarColisionesFrutas() {
-        for (int i = 0; i < NUM_JUGADORES; i++) {
-            if (jugadores[i] != null) {
-                FrutaServidor frutaColisionada = gestorFrutas.verificarColisiones(jugadores[i].getSerpiente());
-                if (frutaColisionada != null) {
-                    // Jugador comió fruta
-                    jugadores[i].agregarPuntos(frutaColisionada.getPuntos());
-                    jugadores[i].crecerSerpiente();
+        for (int i = 0; i < numeroJugadoresActivos; i++) {
+            if (jugadores[i] == null) {
+                System.err.println("❌ ERROR: jugadores[" + i + "] es NULL");
+                continue;
+            }
+            
+            if (jugadores[i].getVidas() <= 0) {
+                continue;
+            }
+            
+            SerpienteServidor serpiente = jugadores[i].getSerpiente();
+            if (serpiente == null) {
+                System.err.println("❌ ERROR: Serpiente de jugador " + (i + 1) + " es NULL");
+                continue;
+            }
+            
+            FrutaServidor frutaColisionada = gestorFrutas.verificarColisiones(serpiente);
+            if (frutaColisionada != null) {
+                int puntosGanados = frutaColisionada.getPuntos();
+                jugadores[i].agregarPuntos(puntosGanados);
+                jugadores[i].crecerSerpiente();
 
-                    // Notificar a clientes
-                    hiloServidor.enviarMensajeATodos("JugadorComio:" + (i + 1) + ":" + frutaColisionada.getPuntos());
-                    System.out.println("🍎 Jugador " + (i + 1) + " comió fruta (+" + frutaColisionada.getPuntos() + " pts)");
+                System.out.println("🍎 J" + (i + 1) + " (" + jugadores[i].getNombre() + ") comió " + 
+                                 frutaColisionada.getTipo() + " (+" + puntosGanados + " pts) " +
+                                 "Total: " + jugadores[i].getPuntuacion());
 
-                    // Reubicar fruta
-                    gestorFrutas.reubicarFruta(frutaColisionada, jugadores[i].getSerpiente());
-                    enviarActualizacionFrutas();
-                    enviarActualizacionPuntuacion();
-                }
+                hiloServidor.enviarMensajeATodos("JugadorComio:" + (i + 1) + ":" + puntosGanados);
+
+                gestorFrutas.reubicarFrutaConJugadores(frutaColisionada, jugadores, numeroJugadoresActivos);
+                enviarActualizacionFrutas();
+                enviarActualizacionPuntuacion();
             }
         }
     }
 
     /**
-     * Verifica colisiones entre serpientes
+     * ✅ CRÍTICO: Verifica colisiones entre serpientes para TODOS los jugadores
      */
     private void verificarColisionesSerpientes() {
-        for (int i = 0; i < NUM_JUGADORES; i++) {
-            if (jugadores[i] == null || jugadores[i].isInvulnerable()) {
+        for (int i = 0; i < numeroJugadoresActivos; i++) {
+            if (jugadores[i] == null) {
+                continue;
+            }
+            
+            if (jugadores[i].isInvulnerable() || jugadores[i].getVidas() <= 0) {
                 continue;
             }
 
             SerpienteServidor serpienteActual = jugadores[i].getSerpiente();
+            if (serpienteActual == null) {
+                continue;
+            }
 
-            // Colisión consigo misma
+            // Colisión consigo mismo
             if (serpienteActual.colisionSerpiente()) {
+                System.out.println("💥 J" + (i + 1) + " (" + jugadores[i].getNombre() + ") chocó consigo mismo");
                 jugadorPierdeVida(i);
                 continue;
             }
 
-            // Colisión con otra serpiente
-            for (int j = 0; j < NUM_JUGADORES; j++) {
-                if (i != j && jugadores[j] != null) {
-                    if (jugadores[j].getSerpiente().colisionConPosicion(
-                            serpienteActual.getPosX(), serpienteActual.getPosY())) {
-                        jugadorPierdeVida(i);
-                        break;
-                    }
+            // ✅ CRÍTICO: Verificar colisión con TODOS los otros jugadores
+            for (int j = 0; j < numeroJugadoresActivos; j++) {
+                if (i == j) continue; // No verificar consigo mismo
+                
+                if (jugadores[j] == null || jugadores[j].getVidas() <= 0) {
+                    continue;
+                }
+                
+                SerpienteServidor otraSerpiente = jugadores[j].getSerpiente();
+                if (otraSerpiente == null) {
+                    continue;
+                }
+                
+                // Verificar si la cabeza de 'i' colisiona con cualquier parte de 'j'
+                if (otraSerpiente.colisionConPosicion(serpienteActual.getPosX(), serpienteActual.getPosY())) {
+                    System.out.println("💥 J" + (i + 1) + " (" + jugadores[i].getNombre() + ") " +
+                                     "chocó con J" + (j + 1) + " (" + jugadores[j].getNombre() + ")");
+                    jugadorPierdeVida(i);
+                    break;
                 }
             }
         }
     }
 
-    /**
-     * Maneja cuando un jugador pierde una vida
-     */
     private void jugadorPierdeVida(int indice) {
         JugadorServidor jugador = jugadores[indice];
         boolean tieneVidas = jugador.perderVida();
@@ -219,154 +342,179 @@ public class LogicaJuegoServidor implements ControladorJuegoServidor {
         hiloServidor.enviarMensajeATodos("JugadorMurio:" + (indice + 1) + ":" + jugador.getVidas());
 
         if (!tieneVidas) {
-            System.out.println("💀 Jugador " + (indice + 1) + " eliminado (sin vidas)");
+            System.out.println("💀 J" + (indice + 1) + " (" + jugador.getNombre() + ") ELIMINADO");
         } else {
-            System.out.println("⚠️ Jugador " + (indice + 1) + " perdió una vida (quedan " + jugador.getVidas() + ")");
+            System.out.println("⚠️ J" + (indice + 1) + " (" + jugador.getNombre() + ") " +
+                             "perdió vida (quedan " + jugador.getVidas() + ")");
             
-            // Resetear posición
-            float posX = (indice == 0) ? -300 : 300;
-            float posY = 0;
+            float[] posiciones = calcularPosicionesIniciales(numeroJugadoresActivos);
+            float posX = posiciones[indice * 2];
+            float posY = posiciones[indice * 2 + 1];
             posicionesX[indice] = posX;
             posicionesY[indice] = posY;
             jugador.resetearPosicion(posX, posY, TAMANIO_ELEMENTOS, TAMANIO_ELEMENTOS);
+            
+            System.out.println("📍 J" + (indice + 1) + " reseteado a (" + posX + ", " + posY + ")");
         }
     }
 
-    /**
-     * Verifica si el juego ha terminado
-     */
     private void verificarFinJuego() {
         int jugadoresVivos = 0;
         int ultimoVivo = -1;
 
-        for (int i = 0; i < NUM_JUGADORES; i++) {
+        for (int i = 0; i < numeroJugadoresActivos; i++) {
             if (jugadores[i] != null && jugadores[i].getVidas() > 0) {
                 jugadoresVivos++;
                 ultimoVivo = i;
             }
         }
 
-        if (jugadoresVivos <= 1) {
-            terminarJuego(ultimoVivo + 1);
+        if (jugadoresVivos <= 1 && numeroJugadoresActivos > 1) {
+            terminarJuego(ultimoVivo >= 0 ? ultimoVivo + 1 : 1);
         }
     }
 
-    /**
-     * Termina el juego
-     */
     private void terminarJuego(int ganador) {
+        if (juegoTerminado) return;
+        
         juegoTerminado = true;
         if (temporizadorJuego != null) {
             temporizadorJuego.cancel();
+            temporizadorJuego = null;
         }
 
         hiloServidor.enviarMensajeATodos("JuegoTerminado:" + ganador);
-        System.out.println("🏆 Juego terminado. Ganador: Jugador " + ganador);
+        System.out.println("🏆 Juego terminado. Ganador: J" + ganador + " (" + jugadores[ganador-1].getNombre() + ")");
         System.out.println("📊 Puntuación final:");
-        for (int i = 0; i < NUM_JUGADORES; i++) {
-            System.out.println("   Jugador " + (i + 1) + ": " + jugadores[i].getPuntuacion() + " puntos");
+        for (int i = 0; i < numeroJugadoresActivos; i++) {
+            if (jugadores[i] != null) {
+                System.out.println("   J" + (i + 1) + " (" + jugadores[i].getNombre() + "): " + 
+                                 jugadores[i].getPuntuacion() + " puntos");
+            }
         }
 
-        // Esperar 5 segundos y desconectar clientes
         new Timer().schedule(new TimerTask() {
             @Override
             public void run() {
-                hiloServidor.desconectarClientes();
-                juegoIniciado = false;
-                System.out.println("⏳ Esperando nuevos jugadores...");
+                resetearEstadoJuego();
             }
         }, 5000);
     }
 
-    // ===== MÉTODOS DE ENVÍO DE DATOS =====
-
-    /**
-     * Envía el estado completo del juego (al inicio)
-     */
-    private void enviarEstadoCompleto() {
-        enviarActualizacionesSerpientes();
-        enviarActualizacionFrutas();
-        enviarActualizacionPuntuacion();
-        System.out.println("📡 Estado inicial enviado a clientes");
+    private void resetearEstadoJuego() {
+        hiloServidor.desconectarClientesYResetear();
+        
+        jugadores = new JugadorServidor[MAX_JUGADORES];
+        posicionesX = new float[MAX_JUGADORES];
+        posicionesY = new float[MAX_JUGADORES];
+        gestorFrutas = null;
+        
+        juegoIniciado = false;
+        juegoTerminado = false;
+        numeroJugadoresActivos = 0;
+        contadorActualizaciones = 0;
+        
+        System.out.println("🔄 Estado reseteado");
+        System.out.println("⏳ Esperando nuevos jugadores...");
     }
 
-    /**
-     * Envía las posiciones de todas las serpientes
-     */
+    private void enviarEstadoCompleto() {
+        System.out.println("📡 Enviando estado completo...");
+        
+        // Enviar frutas múltiples veces
+        for (int i = 0; i < 5; i++) {
+            String mensajeFrutas = "ActualizarFrutas:" + gestorFrutas.serializar();
+            System.out.println("   📤 Envío #" + (i + 1) + " de frutas");
+            hiloServidor.enviarMensajeATodos(mensajeFrutas);
+            
+            try {
+                Thread.sleep(150);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+        
+        System.out.println("   📤 Enviando serpientes iniciales");
+        enviarActualizacionesSerpientes();
+        
+        try {
+            Thread.sleep(100);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        
+        System.out.println("   📤 Enviando puntuación inicial");
+        enviarActualizacionPuntuacion();
+        
+        System.out.println("✅ Estado completo enviado");
+    }
+
     private void enviarActualizacionesSerpientes() {
-        for (int i = 0; i < NUM_JUGADORES; i++) {
+        for (int i = 0; i < numeroJugadoresActivos; i++) {
             if (jugadores[i] != null) {
-                String mensaje = construirMensajeSerpiente(i);
+                String mensaje = "ActualizarSerpiente:" + (i + 1) + ":" + jugadores[i].getSerpiente().serializar();
                 hiloServidor.enviarMensajeATodos(mensaje);
             }
         }
     }
 
-    /**
-     * Construye el mensaje de actualización de una serpiente
-     * Formato: ActualizarSerpiente:NUMERO:X:Y:SEGMENTOS
-     * donde SEGMENTOS = x1:y1,x2:y2,x3:y3,...
-     */
-    private String construirMensajeSerpiente(int indice) {
-        SerpienteServidor serpiente = jugadores[indice].getSerpiente();
-        StringBuilder sb = new StringBuilder();
-
-        sb.append("ActualizarSerpiente:");
-        sb.append(indice + 1).append(":");
-        sb.append((int) serpiente.getPosX()).append(":");
-        sb.append((int) serpiente.getPosY()).append(":");
-        sb.append(serpiente.serializar()); // Todos los segmentos
-
-        return sb.toString();
-    }
-
-    /**
-     * Envía las posiciones de todas las frutas
-     */
     private void enviarActualizacionFrutas() {
         String mensaje = "ActualizarFrutas:" + gestorFrutas.serializar();
         hiloServidor.enviarMensajeATodos(mensaje);
     }
 
-    /**
-     * Envía la puntuación actual
-     */
     private void enviarActualizacionPuntuacion() {
         StringBuilder sb = new StringBuilder("ActualizarPuntuacion:");
-        for (int i = 0; i < NUM_JUGADORES; i++) {
+        for (int i = 0; i < numeroJugadoresActivos; i++) {
             if (i > 0) sb.append(":");
             sb.append(jugadores[i] != null ? jugadores[i].getPuntuacion() : 0);
         }
         hiloServidor.enviarMensajeATodos(sb.toString());
     }
 
-    // ===== IMPLEMENTACIÓN DE ControladorJuegoServidor =====
-
     @Override
     public void moverJugador(int numeroJugador, Direcciones direccion) {
         int indice = numeroJugador - 1;
-        if (indice >= 0 && indice < NUM_JUGADORES && jugadores[indice] != null) {
+        if (indice >= 0 && indice < numeroJugadoresActivos && jugadores[indice] != null) {
             jugadores[indice].cambiarDireccion(direccion);
         }
     }
 
     @Override
     public void jugadorDesconectado(int numeroJugador) {
-        System.out.println("⚠️ Jugador " + numeroJugador + " desconectado");
-        // Terminar el juego si un jugador se desconecta
-        terminarJuego((numeroJugador == 1) ? 2 : 1);
+        System.out.println("⚠️ J" + numeroJugador + " desconectado");
+        
+        if (juegoIniciado && !juegoTerminado) {
+            int ganador = -1;
+            for (int i = 0; i < numeroJugadoresActivos; i++) {
+                if (i != (numeroJugador - 1) && jugadores[i] != null && jugadores[i].getVidas() > 0) {
+                    ganador = i + 1;
+                    break;
+                }
+            }
+            
+            if (ganador > 0) {
+                System.out.println("🏆 J" + ganador + " gana por abandono");
+                terminarJuego(ganador);
+            }
+        }
+    }
+    
+    @Override
+    public boolean estaJuegoIniciado() {
+        return juegoIniciado;
     }
 
-    /**
-     * Cierra el servidor
-     */
     public void cerrar() {
         if (temporizadorJuego != null) {
             temporizadorJuego.cancel();
         }
+        if (temporizadorEspera != null) {
+            temporizadorEspera.cancel();
+        }
         if (hiloServidor != null) {
             hiloServidor.terminar();
         }
-        System.out.println("✅ Servidor cerrado correctamente");
+        System.out.println("✅ Servidor cerrado");
     }
 }

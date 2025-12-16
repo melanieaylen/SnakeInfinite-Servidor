@@ -1,9 +1,10 @@
 package mi.juego.snake.lwjgl3;
 
+import com.badlogic.gdx.ApplicationListener;
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application;
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3ApplicationConfiguration;
 
-import mi.juego.snake.Principal;
+import servidor.PrincipalServidor;
 import utiles.Config;
 
 /** Launches the desktop (LWJGL3) application. */
@@ -14,7 +15,7 @@ public class Lwjgl3Launcher {
     }
 
     private static Lwjgl3Application createApplication() {
-        return new Lwjgl3Application(new Principal(), getDefaultConfiguration());
+        return new Lwjgl3Application((ApplicationListener) new PrincipalServidor(), getDefaultConfiguration());
     }
 
     private static Lwjgl3ApplicationConfiguration getDefaultConfiguration() {

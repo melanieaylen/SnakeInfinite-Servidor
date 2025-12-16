@@ -19,6 +19,11 @@ public class Cliente {
         this.puerto = puerto;
     }
 
+    public void actualizarPuerto(int nuevoPuerto) {
+        this.puerto = nuevoPuerto;
+        this.id = ip.toString() + ":" + nuevoPuerto;
+    }
+    
     public String obtenerId() {
         return id;
     }

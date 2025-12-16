@@ -1,9 +1,10 @@
 package elementos;
 
 /**
- * FrutaServidor - Fruta sin renderizado para el servidor
+ * FrutaServidor - Versión sin LibGDX para el servidor
  */
 public class FrutaServidor {
+    
     private float posX;
     private float posY;
     private int ancho;
@@ -27,6 +28,15 @@ public class FrutaServidor {
         return posX == x && posY == y;
     }
     
+    // Getters
+    public float getPosX() {
+        return posX;
+    }
+    
+    public float getPosY() {
+        return posY;
+    }
+    
     public TipoFruta getTipo() {
         return tipo;
     }
@@ -35,11 +45,7 @@ public class FrutaServidor {
         return tipo.getPuntos();
     }
     
-    public float getPosX() {
-        return posX;
-    }
-    
-    public float getPosY() {
-        return posY;
+    public String serializar() {
+        return tipo.name() + ":" + posX + ":" + posY;
     }
 }
